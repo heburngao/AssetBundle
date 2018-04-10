@@ -13,7 +13,7 @@ public static void MakeAssetBundle (){
         if(!Directory.Exists(bundSaveAt)){
             Directory.CreateDirectory(bundSaveAt);
         }
-        BuildPipeline.BuildAssetBundles(bundSaveAt,BuildAssetBundleOptions.ChunkBasedCompression,EditorUserBuildSettings.activeBuildTarget);
+        BuildPipeline.BuildAssetBundles(bundSaveAt,BuildAssetBundleOptions.ChunkBasedCompression/DeterministicAssetBundle,EditorUserBuildSettings.activeBuildTarget);
 
   //      var files = Directory.GetFiles(bundSaveAt);
   //      foreach(var file in files){
