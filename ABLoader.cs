@@ -42,11 +42,10 @@ public class ABLoader : MonoBehaviour
         //    Directory.CreateDirectory(pathSaveAt);
         //}
 
-        StartCoroutine(Initial_DownLoadAssetBundle(PLATFORM, true));
+        StartCoroutine(Initial_DownLoadAssetBundle(PLATFORM));
 
         StartCoroutine(LoadFromFile("a","Workshop Set"));
         StartCoroutine(LoadFromFile("b", "Cube"));
-        // StartCoroutine(LoadFromFile("fbx2", "axe_1"));
     }
     //先回笼出第一次加载保存的依赖关系，再加载一次相关被依赖bundle,最终加载并实例化目标bundle的对象
    
@@ -55,234 +54,228 @@ public class ABLoader : MonoBehaviour
     Dictionary<string, BundlesInfo> remoteDependce = new Dictionary<string, BundlesInfo>();
     Dictionary<string, BundlesInfo> localDependce = new Dictionary<string, BundlesInfo>();
     const string PLATFORM = "StandaloneWindows64";//"iOS";
+    //string uri = "http://localhost/ABoutput/"+PLATFORM;
+    string URI_CDN;//= "http://192.168.11.51:7080/ABoutput/" + PLATFORM;
     string rootRemote_BundlePath;
     List<string> localBundleNameList = null;
-    
-    IEnumerator Initial_DownLoadAssetBundle(string assetbundleName, bool isFirst)
+    string pathSaveAt;// = GetPath() + "/" + PLATFORM + "/";
+    IEnumerator Initial_DownLoadAssetBundle(string assetbundleName)
     {
         while (!Caching.ready)
         {
             yield return null;
         }
-        //string uri = "http://localhost/ABoutput/"+PLATFORM;
-        string uri = "http://192.168.11.51:7080/ABoutput/" + PLATFORM;
 
-       
 
-        if (isFirst)
+
+        URI_CDN = "http://192.168.11.51:7080/ABoutput/" + PLATFORM;
+
+        yield return GetLocalBundleList(PLATFORM);
+
+
+        rootRemote_BundlePath = URI_CDN + "/" + assetbundleName;
+        Debug.Log("  uri: <color=yellow>" + rootRemote_BundlePath + "</color>");
+        UnityWebRequest request = UnityWebRequest.Get(rootRemote_BundlePath);
+        //方法1:
+        yield return RequestDownload(request, assetbundleName);
+
+        var rootBundleBytes = request.downloadHandler.data;
+
+        AssetBundle rootRemoteBundle = AssetBundle.LoadFromMemory(rootBundleBytes);
+        List<string> bundlsList = this.CollectionRemoteDependence(rootRemoteBundle, remoteDependce);
+        rootRemoteBundle.Unload(true);
+
+        //AssetBundle bundle = (request.downloadHandler as DownloadHandlerAssetBundle).assetBundle;
+        //AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(request);
+        //##########################################################################################################################
+        //方法2:
+
+        //WWW www = new WWW(uri + "/" + assetbundleName);
+        //yield return www;
+
+        //if (!string.IsNullOrEmpty(www.error))
+        //{
+        //    yield break;
+        //}
+
+        //while (!www.isDone)
+        //{
+        //    yield return null;
+        //}
+        //AssetBundle bundle = www.assetBundle;
+
+
+        //##########################################################################################################################
+
+        //manifest = bundle.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
+
+
+
+        //allbundles = manifest.GetAllAssetBundles();
+
+
+
+        //List<string> bundlsList = new List<string>(allbundles);
+        ////Debug.Log("<color=orange>总bundle 数</color> :count of bundlsList::: " + bundlsList.Count);
+
+
+
+        ////Debug.Log(assetbundleName +" || "+ manifest.GetAssetBundleHash(assetbundleName));
+        ////bool iscached = Caching.IsVersionCached(GetPath()+"/iOS/"+assetbundleName, manifest.GetAssetBundleHash(assetbundleName));
+        ////Debug.Log(GetPath() + "/iOS/" + assetbundleName + "<color=red>是否缓存过:</color>" + iscached);
+
+
+        //foreach (string remoteBundleName in bundlsList)
+        //{
+        //    // 加载依赖
+        //    Debug.Log("<color=white>bundle: " + remoteBundleName + "</color>");
+        //    var dependenceBundles = manifest.GetAllDependencies(remoteBundleName);
+        //    var subDependce = new List<string>();//每个bundle的子级依赖
+        //                                         //var objs = bundle.LoadAllAssets();
+        //                                         //处理依赖关系
+        //    foreach (string dependbundle in dependenceBundles)
+        //    {
+        //        if (!bundlsList.Contains(dependbundle))
+        //        {
+        //            // 加载bundle  ,其实并没有使用到 
+        //            Debug.LogError("加载非依赖 <color=green>dependce bundle: " + dependbundle + "</color>");
+
+        //        }
+        //        else
+        //        {
+        //            Debug.Log("<color=yellow>加载子级依赖</color> <color=red> dependce bundle: " + dependbundle + "</color>");
+        //            subDependce.Add(dependbundle);
+        //        }
+
+        //    }
+        //    Hash128 remoteHashcode = manifest.GetAssetBundleHash(remoteBundleName);
+        //    BundlesInfo remoteBundleInfo = new BundlesInfo
+        //    {
+        //        bundlesNames = subDependce,
+        //        hashCode = remoteHashcode,
+        //    };
+        //    remoteDependce.Add(remoteBundleName, remoteBundleInfo);
+        //    // 加载bundle 
+        //    //StartCoroutine(DownLoadAssetBundle(remoteBundle, false));
+        //}
+
+        //SaveTheDownLoad(www, assetbundleName);//只适用于方法二
+        //bundle.Unload(true);
+
+
+
+        //############################################################################################################################################
+        foreach (var remoteBundle in bundlsList)
         {
-
-            string pathSaveAt1 = GetPath() + "/" + PLATFORM + "/";
-            if (Directory.Exists(pathSaveAt1))
-            {
-                AssetBundle localRootAB_loaded = AssetBundle.LoadFromFile(pathSaveAt1 + PLATFORM);
-                localBundleNameList = CollectionLocalDependence(localRootAB_loaded, localDependce);
-                localRootAB_loaded.Unload(true);
-            }
-            yield return new WaitForSeconds(1f);
-
-
-
-
-
-
-
-
-            rootRemote_BundlePath = uri + "/" + assetbundleName;
-            Debug.Log("isFirst:  " + isFirst + "  uri: <color=yellow>" + rootRemote_BundlePath + "</color>");
-
-            //方法1:
-            UnityWebRequest request = UnityWebRequest.Get(rootRemote_BundlePath);
-            request.timeout = 30;
-            yield return request.SendWebRequest();
-            while (!request.isDone || !string.IsNullOrEmpty(request.error))
-            {
-                Debug.LogError("load assets bundle Error");
-                yield return null;
-            }
-
-            if (request.isHttpError || request.isNetworkError)
-            {
-                Debug.LogError("load assets bundle Error , break");
-                yield break;
-            }
-            byte[] rootBundleBytes = request.downloadHandler.data;
-            print(" loaded root bundle byte n: " + rootBundleBytes.Length);
-            // assetbundle加载 实现::
-            //AssetBundle bundle = AssetBundle.LoadFromMemory(bytte);
-            SaveTheDownLoad(request, assetbundleName);//只适用于方法一
-
-            AssetBundle rootRemoteBundle = AssetBundle.LoadFromMemory(rootBundleBytes);
-            var  bundlsList  = this.CollectionRemoteDependence(rootRemoteBundle,remoteDependce);
-            rootRemoteBundle.Unload(true);
-
-            //AssetBundle bundle = (request.downloadHandler as DownloadHandlerAssetBundle).assetBundle;
-            //AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(request);
-            //##########################################################################################################################
-            //方法2:
-
-            //WWW www = new WWW(uri + "/" + assetbundleName);
-            //yield return www;
-
-            //if (!string.IsNullOrEmpty(www.error))
-            //{
-            //    yield break;
-            //}
-
-            //while (!www.isDone)
-            //{
-            //    yield return null;
-            //}
-            //AssetBundle bundle = www.assetBundle;
-
-
-            //##########################################################################################################################
-
-            //manifest = bundle.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
-
-
-
-            //allbundles = manifest.GetAllAssetBundles();
-
-
-
-            //List<string> bundlsList = new List<string>(allbundles);
-            ////Debug.Log("<color=orange>总bundle 数</color> :count of bundlsList::: " + bundlsList.Count);
-
-
-
-            ////Debug.Log(assetbundleName +" || "+ manifest.GetAssetBundleHash(assetbundleName));
-            ////bool iscached = Caching.IsVersionCached(GetPath()+"/iOS/"+assetbundleName, manifest.GetAssetBundleHash(assetbundleName));
-            ////Debug.Log(GetPath() + "/iOS/" + assetbundleName + "<color=red>是否缓存过:</color>" + iscached);
-
-
-            //foreach (string remoteBundleName in bundlsList)
-            //{
-            //    // 加载依赖
-            //    Debug.Log("<color=white>bundle: " + remoteBundleName + "</color>");
-            //    var dependenceBundles = manifest.GetAllDependencies(remoteBundleName);
-            //    var subDependce = new List<string>();//每个bundle的子级依赖
-            //                                         //var objs = bundle.LoadAllAssets();
-            //                                         //处理依赖关系
-            //    foreach (string dependbundle in dependenceBundles)
-            //    {
-            //        if (!bundlsList.Contains(dependbundle))
-            //        {
-            //            // 加载bundle  ,其实并没有使用到 
-            //            Debug.LogError("加载非依赖 <color=green>dependce bundle: " + dependbundle + "</color>");
-
-            //        }
-            //        else
-            //        {
-            //            Debug.Log("<color=yellow>加载子级依赖</color> <color=red> dependce bundle: " + dependbundle + "</color>");
-            //            subDependce.Add(dependbundle);
-            //        }
-
-            //    }
-            //    Hash128 remoteHashcode = manifest.GetAssetBundleHash(remoteBundleName);
-            //    BundlesInfo remoteBundleInfo = new BundlesInfo
-            //    {
-            //        bundlesNames = subDependce,
-            //        hashCode = remoteHashcode,
-            //    };
-            //    remoteDependce.Add(remoteBundleName, remoteBundleInfo);
-            //    // 加载bundle 
-            //    //StartCoroutine(DownLoadAssetBundle(remoteBundle, false));
-            //}
-
-            //SaveTheDownLoad(www, assetbundleName);//只适用于方法二
-            //bundle.Unload(true);
-
-
-
-            //############################################################################################################################################
-            foreach (var remoteBundle in bundlsList)
-            {
-                // 加载bundle 
-                StartCoroutine(Initial_DownLoadAssetBundle(remoteBundle, false));
-            }
+            // 加载bundle 
+            StartCoroutine(Initial_DownLoad_DependenceAssetBundle(remoteBundle));
         }
-        else
-        {
-            BundlesInfo remoteBundlesInfo;
-            if (remoteDependce.TryGetValue(assetbundleName, out remoteBundlesInfo))
-            {
-                //检测是否被缓存过，如果没有则下载
-                //if (!Caching.IsVersionCached(uri + "/" + assetbundleName, bundlesInfo.hashCode))
-
-                string pathSaveAt = GetPath() + "/" + PLATFORM + "/";
-                print("local bundle path:" + pathSaveAt + assetbundleName);
-                print("remote bundle path:" + rootRemote_BundlePath +"/"+ assetbundleName);
-
-                var localHashCode = "";//Check(pathSaveAt + assetbundleName);//getLocalHashCode(assetbundleName);
-
-                if(localBundleNameList != null)
-                {
-                    BundlesInfo localBundlesInfo;
-                    if(localDependce.TryGetValue(assetbundleName, out localBundlesInfo))
-                    {
-                        localHashCode = localBundlesInfo.hashCode.ToString();
-
-                    }
-                }
-                //var remoteHashCode = Check_Stream(rootRemote_BundlePath + "/" + assetbundleName);//
-                var remoteHashCode = remoteBundlesInfo.hashCode.ToString();
-
-                Debug.Log("compaire hash code : <color=purple>" + localHashCode + " / " + remoteHashCode + "</color>");
-                if (localHashCode != remoteHashCode)//如果本地记录的hashcode 与服务端不同，则要更新下载
-                {
-
-                    Debug.Log("<color=orange> 需要更新,下载 dependence bundle To </color>: " + local_cacheBundle_path + "/" + assetbundleName );
-
-                    #region
-
-                    UnityWebRequest request = UnityWebRequest.Get(uri + "/" + assetbundleName);
-                    yield return request.SendWebRequest();
-                    if (!string.IsNullOrEmpty(request.error) || request.isHttpError ||request.isNetworkError)
-                    {
-                        Debug.LogError("load assets bundle Error");
-                        yield break;
-                    }
-                    if (request.isHttpError || request.isNetworkError)
-                    {
-
-                        Debug.LogError("load assets bundle Error , break");
-                        yield break;
-                    }
-                    SaveTheDownLoad(request, assetbundleName);
-
-                    #endregion
-                    #region
-                    //WWW www = new WWW(uri + "/" + assetbundleName);
-
-                    //if (!string.IsNullOrEmpty(www.error))
-                    //{
-                    //    yield break;
-                    //}
-
-                    //yield return www;
-                    //while (!www.isDone)
-                    //{
-                    //    yield return null;
-                    //}
-                    //fileCount++;
-                    //print("加载进度::::: " + www.progress * 100 + " | " + fileCount);
-
-                    //SaveTheDownLoad(www, assetbundleName);
-
-                    #endregion
-
-                }
-                else
-                {
-                    fileCount++;
-                    print("<color=green>无需更新</color> assetbundleName :<color=white> " + assetbundleName + "</color> fileCount: "+ fileCount);
-                }
-            }
-        }
-
-
     }
+    private IEnumerator Initial_DownLoad_DependenceAssetBundle(string assetbundleName)
+    {
+        BundlesInfo remoteBundlesInfo;
+        if (remoteDependce.TryGetValue(assetbundleName, out remoteBundlesInfo))
+        {
+            //检测是否被缓存过，如果没有则下载
+            //if (!Caching.IsVersionCached(uri + "/" + assetbundleName, bundlesInfo.hashCode))
+            print("local bundle path:" + pathSaveAt + assetbundleName);
+            print("remote bundle path:" + rootRemote_BundlePath + "/" + assetbundleName);
+
+            string localHashCode = "";//Check(pathSaveAt + assetbundleName);//getLocalHashCode(assetbundleName);
+
+            if (localBundleNameList != null)
+            {
+                BundlesInfo localBundlesInfo;
+                if (localDependce.TryGetValue(assetbundleName, out localBundlesInfo))
+                {
+                    localHashCode = localBundlesInfo.hashCode.ToString();
+
+                }
+            }
+            //var remoteHashCode = Check_Stream(rootRemote_BundlePath + "/" + assetbundleName);//
+            string remoteHashCode = remoteBundlesInfo.hashCode.ToString();
+
+            Debug.Log("compaire hash code : <color=purple>" + localHashCode + " / " + remoteHashCode + "</color>");
+            if (localHashCode != remoteHashCode)//如果本地记录的hashcode 与服务端不同，则要更新下载
+            {
+
+                Debug.Log("<color=orange> 需要更新,[ Update ] dependence bundle @ </color>: " + local_cacheBundle_path + "/" + assetbundleName);
+
+                #region
+
+                UnityWebRequest request = UnityWebRequest.Get(URI_CDN + "/" + assetbundleName);
+
+                yield return RequestDownload(request, assetbundleName);
+
+                #endregion
+                #region
+                //WWW www = new WWW(uri + "/" + assetbundleName);
+
+                //if (!string.IsNullOrEmpty(www.error))
+                //{
+                //    yield break;
+                //}
+
+                //yield return www;
+                //while (!www.isDone)
+                //{
+                //    yield return null;
+                //}
+                //fileCount++;
+                //print("加载进度::::: " + www.progress * 100 + " | " + fileCount);
+
+                //SaveTheDownLoad(www, assetbundleName);
+
+                #endregion
+
+            }
+            else
+            {
+                fileCount++;
+                print("<color=green>无需更新</color> assetbundleName :<color=white> " + assetbundleName + "</color> fileCount: " + fileCount);
+            }
+        }
+    }
+    private IEnumerator GetLocalBundleList(string rootAssetBundleName)
+    {
+        #region local assetbundle 
+        pathSaveAt = GetLocalCachePath() + "/" + PLATFORM + "/";
+        if (Directory.Exists(pathSaveAt))
+        {
+            AssetBundle localRootAB_loaded = AssetBundle.LoadFromFile(pathSaveAt + rootAssetBundleName);
+            localBundleNameList = CollectionLocalDependence(localRootAB_loaded, localDependce);
+            localRootAB_loaded.Unload(true);
+        }
+        yield return new WaitForSeconds(1f);
+
+        #endregion
+    }
+
+    private IEnumerator RequestDownload(UnityWebRequest request , string assetbundleName)
+    {
+       // UnityWebRequest request = UnityWebRequest.Get(rootRemoteBundlePath);
+        request.timeout = 30;
+        yield return request.SendWebRequest();
+        while (!request.isDone || !string.IsNullOrEmpty(request.error))
+        {
+            Debug.LogError("load assets bundle Error");
+            yield return null;
+        }
+
+        if (request.isHttpError || request.isNetworkError)
+        {
+            Debug.LogError("load assets bundle Error , break");
+            yield break;
+        }
+        //byte[] rootBundleBytes = request.downloadHandler.data;
+        //print(" loaded root bundle byte n: " + rootBundleBytes.Length);
+        // assetbundle加载 实现::
+        //AssetBundle bundle = AssetBundle.LoadFromMemory(bytte);
+        SaveTheDownLoad(request, assetbundleName);//只适用于方法一
+
+        
+    }
+
     private List<string> CollectionLocalDependence(AssetBundle rootLocalBundle, Dictionary<string, BundlesInfo> _localDependce)
     {
         AssetBundleManifest rootLocalManifest = rootLocalBundle.LoadAsset<AssetBundleManifest>("AssetBundleManifest");
@@ -376,7 +369,7 @@ public class ABLoader : MonoBehaviour
     //}
     void SaveTheDownLoad(WWW www, string assetbundleName)
     {
-        string pathSaveAt = GetPath() + "/" + PLATFORM + "/";
+        string pathSaveAt = GetLocalCachePath() + "/" + PLATFORM + "/";
         Debug.Log("AT: " + pathSaveAt);
         if (!Directory.Exists(pathSaveAt))
         {
@@ -442,8 +435,8 @@ public class ABLoader : MonoBehaviour
 
     void SaveTheDownLoad(UnityWebRequest request, string assetbundleName)
     {
-        string pathSaveAt = GetPath() + "/" + PLATFORM + "/";
-        Debug.Log("AT: " + pathSaveAt);
+        string pathSaveAt = GetLocalCachePath() + "/" + PLATFORM + "/";
+       
         if (!Directory.Exists(pathSaveAt))
         {
             Directory.CreateDirectory(pathSaveAt);
@@ -462,6 +455,7 @@ public class ABLoader : MonoBehaviour
         byte[] bytes = request.downloadHandler.data;
 
         //将assetbundle存到本地，方法一,效率最高:
+        Debug.Log("SaveTheDownLoad bundle @ : " + pathSaveAt + assetbundleName);
         FileInfo info = new FileInfo(pathSaveAt + assetbundleName);
         FileStream fs = info.Create();
         fs.Write(bytes, 0, bytes.Length);
@@ -492,7 +486,7 @@ public class ABLoader : MonoBehaviour
 
     }
 
-    string GetPath()
+    string GetLocalCachePath()
     {
 #if UNITY_EDITOR
         //return @"file://"+Application.persistentDataPath;//+ "/StreamingAssets";
@@ -511,11 +505,11 @@ public class ABLoader : MonoBehaviour
     {
 
     }
-    IEnumerator LoadFromFile(string bundleName, string goName)
+    IEnumerator LoadFromFile(string bundleName, string assetName)
     {
         print("<color=cyan>will load assets from bundle, 10 seconds later</color>");
         yield return new WaitForSeconds(10f);
-        print("<color=cyan>loading assets : " + goName + " from bundle : " + bundleName + "</color>");
+       
         while (!Caching.ready)
         {
             yield return null;
@@ -530,29 +524,37 @@ public class ABLoader : MonoBehaviour
         //    yield return null;
         //}
 
-        string pathSaveAt = GetPath() + "/" + PLATFORM + "/";
+        string pathSaveAt = GetLocalCachePath() + "/" + PLATFORM + "/";
 
 
-        BundlesInfo info = null;
+        List<AssetBundle> bundles = new List<AssetBundle>();
+        BundlesInfo info;
         bool hasManifest = remoteDependce.TryGetValue(bundleName, out info);
         if (hasManifest)
         {
-
             string[] depc = info.bundlesNames.ToArray();
             if (depc.Length > 0)
             {
                 foreach (var dependbundle in depc)
                 {
-                    Debug.Log(bundleName + "<color=yellow>-> load 依赖 asset bundle : </color>" + dependbundle);
-                    //AssetBundle dependAB = AssetBundle.LoadFromFile(pathSaveAt + dependbundle);
-                    AssetBundle.LoadFromFile(pathSaveAt + dependbundle);
+                    Debug.Log(bundleName + "<color=yellow>-> loadAsset from dependence bundle : </color>" + pathSaveAt + dependbundle);
+                    AssetBundle dependAB = AssetBundle.LoadFromFile(pathSaveAt + dependbundle);
+                    //dependAB.Unload(false);
+                    bundles.Add(dependAB);
                 }
             }
         }
+        print("<color=cyan>loading assets : " + assetName + " from bundle : " + pathSaveAt + bundleName + "</color>");
         AssetBundle ab = AssetBundle.LoadFromFile(pathSaveAt + bundleName);
-        GameObject go = ab.LoadAsset<GameObject>(goName);
+        GameObject go = ab.LoadAsset<GameObject>(assetName);
         Instantiate(go);
+        print("bundle : " + ab.name + " Unload()");
         ab.Unload(false);//AAA
+        foreach (var item in bundles)
+        {
+            print("sub bundle : "+ item.name + " Unload()");
+            item.Unload(false);
+        }
         AssetBundle.UnloadAllAssetBundles(false);
     }
 
